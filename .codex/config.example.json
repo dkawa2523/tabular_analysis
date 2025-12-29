@@ -1,0 +1,22 @@
+{
+  "runner_version": "polyrepo-scaffold-v1",
+  "codex_command": "codex",
+  "codex_subcommand": "exec",
+  "sandbox": "workspace-write",
+  "use_full_auto_if_supported": true,
+  "codex_skip_git_repo_check": "auto",
+  "max_attempts_per_task": 25,
+  "prefer_task_md_verification": true,
+  "require_codex_success": true,
+  "require_task_must_change_globs": true,
+  "require_task_md_updated": true,
+  "require_nonce_in_task_md": true,
+  "diff_ignore_paths": [
+    "work/queue.json",
+    "work/_runner_state.json",
+    "work/runs/"
+  ],
+  "default_verify_commands": [
+    "python -m compileall -q ."
+  ]
+}

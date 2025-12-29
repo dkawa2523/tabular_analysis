@@ -1,0 +1,17 @@
+__pycache__/
+*.pyc
+.venv/
+dist/
+build/
+*.egg-info/
+
+outputs/
+multirun/
+
+.clearml_cache/
+
+work/runs/
+work/_runner_state.json
+.codex_exec_selfcheck.txt
+
+.DS_Store

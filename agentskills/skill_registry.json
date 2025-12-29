@@ -1,0 +1,44 @@
+{
+  "skills": [
+    {
+      "id": "S10",
+      "name": "Architecture & polyrepo boundaries",
+      "path": "agentskills/skills/S10_ARCHITECTURE.md"
+    },
+    {
+      "id": "S20",
+      "name": "Hydra config conventions",
+      "path": "agentskills/skills/S20_HYDRA.md"
+    },
+    {
+      "id": "S40",
+      "name": "ClearML task UI design",
+      "path": "agentskills/skills/S40_CLEARML_TASK_UI.md"
+    },
+    {
+      "id": "S50",
+      "name": "ClearML datasets/versioning",
+      "path": "agentskills/skills/S50_CLEARML_DATASETS.md"
+    },
+    {
+      "id": "S60",
+      "name": "ClearML pipelines/orchestration",
+      "path": "agentskills/skills/S60_CLEARML_PIPELINES.md"
+    },
+    {
+      "id": "S70",
+      "name": "Tabular ML workflow",
+      "path": "agentskills/skills/S70_TABULAR_ML.md"
+    },
+    {
+      "id": "S95",
+      "name": "Cleanup/deprecation",
+      "path": "agentskills/skills/S95_CLEANUP.md"
+    },
+    {
+      "id": "S98",
+      "name": "Task writing & queue operations",
+      "path": "agentskills/skills/S98_TASK_OPS.md"
+    }
+  ]
+}
