@@ -1,10 +1,10 @@
 from __future__ import annotations
 
+"""Common CLI helpers for Hydra config handling."""
+
 from typing import Any, Dict
 
 from omegaconf import OmegaConf
-
-CONFIG_PATH = "../../../conf"
 
 # NOTE:
 # - We intentionally avoid connecting the full config to ClearML.

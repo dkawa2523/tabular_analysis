@@ -42,18 +42,19 @@ Priority: P0
 
 ## Platform reuse checklist (Codex MUST fill)
 - Reused from ml-platform:
-  - 
+  - ml_platform.integrations.clearml (task_factory/connect_hparams/set_user_properties/upload_artifact/apply_ui_hygiene)
+  - ml_platform.config.export_config_artifact
 - Missing in ml-platform / implemented in solution:
-  - 
+  - ClearML Dataset helper (create_dataset_from_files/get_local_copy_if_dataset_id)
 - TODO candidates to move to platform:
-  - 
+  - ClearML Dataset helper in `src/tabular_analysis/integrations/clearml/dataset.py`
 
 ## Risks addressed (Codex MUST fill; map to docs/09_RISKS_AND_MITIGATIONS.md)
-- A (traceability):
+- A (traceability): manifest.json includes local_path+sha256; user properties include usecase_id/process
 - B (leaderboard target selection):
 - C (comparability/leak/skew):
-- D (ClearML UI hygiene):
-- E (local/agent/clone):
+- D (ClearML UI hygiene): HyperParameters limited to data.local_path/format; artifacts in outputs
+- E (local/agent/clone): local paths resolved via Hydra absolute path
 - F (grid explosion control):
 - G (bloat/cleanup):
 
@@ -61,9 +62,13 @@ Priority: P0
 - ClearML Dataset 作成は `integrations/clearml/dataset.py` に閉じ込める（coreに入れない）。
 
 ## Next Improvements (Codex MUST write)
-- (write suggestions for next tasks)
+- Add optional encoding/sep handling for CSV input
+- Add schema validation for required columns when target_col is known
 
 ## RESULT
-- NONCE: 
-- RESULT: (TODO)  # Must be set to DONE to complete task
-- Evidence (files/commands):
+- NONCE: N003-20251230-2257-7b1b
+- RESULT: DONE
+- Verification: `python -m tabular_analysis.cli.dataset_register run.clearml.enabled=false data.local_path=data/example.csv` (pass); `CLEARML_OFFLINE_MODE=1 CLEARML_CACHE_DIR=/Users/kawahito/Desktop/ml_polyrepo_workspace_v1/ml-solution-template/usecase/tabular-analysis/outputs/clearml_cache python -m tabular_analysis.cli.dataset_register run.clearml.enabled=true data.local_path=data/example.csv` (pass)
+- Evidence (files/commands): outputs/dataset_register/{schema.json,head.csv,debug_samples.jsonl,manifest.json,config_effective.yaml,config_full.yaml}
+- Next Improvements: optional CSV encoding/sep config; schema validation when target_col specified
+- Files changed: src/tabular_analysis/flows/dataset_register.py, src/tabular_analysis/integrations/clearml/dataset.py

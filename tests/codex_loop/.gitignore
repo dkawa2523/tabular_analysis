@@ -1,0 +1,4 @@
+# codex_loop runtime + logs (local only)
+runtime.json
+.codex_exec_selfcheck.log
+.codex_exec_selfcheck.txt

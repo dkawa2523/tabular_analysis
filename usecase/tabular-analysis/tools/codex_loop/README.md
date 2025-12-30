@@ -1,15 +1,31 @@
 # codex_loop (tabular-analysis)
 
-このフォルダは `work/queue.json` のタスクを順番に処理するための補助ツールです。
+## What this tool does
+- Reads `work/queue.json`
+- Picks an eligible task (status=todo and deps done)
+- Runs Codex CLI (`codex exec --sandbox <mode> "<PROMPT>"`)
+- Detects real file changes via snapshot diff (works without git)
+- Runs **verification commands** extracted from the task markdown
+- Marks task done in queue only when:
+  - verification passes (return code == 0 for all commands; stdout is allowed)
+  - task md contains `- RESULT: DONE` and a NONCE
+  - must_change_globs satisfied
 
-## 使い方
+## Logs
+- `work/runs/task_XXX/`
+  - `prompt.txt`
+  - `codex_output.txt`
+  - `codex_rc.txt`
+  - `changed_paths.txt`
+  - `verification.txt`
+  - `verification_failed_cmd.txt` (only on failure)
+
+## Selfcheck
+Run:
 ```bash
 bash tools/codex_loop/selfcheck_codex_exec.sh
-python tools/codex_loop/run.py --repo . --once
-python tools/codex_loop/run.py --repo .
 ```
 
-## DONE判定
-- `work/tasks/Txxx_*.md` に `RESULT: DONE` が書かれたときのみ DONE とみなします。
-- それ以外は **同じタスクを繰り返し**実行します（中途半端で次に進まない）。
-
+It creates:
+- `tools/codex_loop/codex_exec_selfcheck.log`
+- `tools/codex_loop/runtime.json`

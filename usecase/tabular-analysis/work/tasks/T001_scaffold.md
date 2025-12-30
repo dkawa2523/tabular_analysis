@@ -43,48 +43,49 @@ None
 
 ## Platform reuse checklist (Codex MUST fill)
 - Reused from ml-platform:
-  - None in this scaffold task (platform_scan only; no clearml utils available).
+  - None in scaffold (scan only; no platform APIs invoked yet)
 - Missing in ml-platform / implemented in solution:
-  - None in this task (ClearML/task utils to be evaluated in later tasks).
+  - None in this task (no new utilities added)
 - TODO candidates to move to platform:
-  - None yet.
+  - ClearML task/UI helpers if platform remains empty (planned for T005+)
 
 ## Risks addressed (Codex MUST fill; map to docs/09_RISKS_AND_MITIGATIONS.md)
-- A (traceability): N/A in scaffold (no artifacts/manifest yet).
-- B (leaderboard target selection): N/A in scaffold (no leaderboard logic yet).
-- C (comparability/leak/skew): N/A in scaffold (no data flow yet).
-- D (ClearML UI hygiene): README references UI contract; scaffold keeps CLI tasks isolated.
-- E (local/agent/clone): N/A in scaffold (execution modes to be added later).
-- F (grid explosion control): N/A in scaffold (pipeline logic later).
-- G (bloat/cleanup): Kept existing layout; no new dirs/files beyond minimal edits.
+- A (traceability): Not yet (manifest/properties planned in T005+)
+- B (leaderboard target selection): Not yet (leaderboard tasks planned in T009/T010)
+- C (comparability/leak/skew): Not yet (preprocess/train/infer planned in T004/T006/T008)
+- D (ClearML UI hygiene): Partial (README points to UI contract; no logging yet)
+- E (local/agent/clone): Not yet (agent/clone support planned in T012)
+- F (grid explosion control): Not yet (pipeline grid planned in T011)
+- G (bloat/cleanup): Addressed by keeping scaffold minimal and cleaning unused imports
 
 ## Notes / Risks
 - この時点では実装はしない。骨組みの整合だけを取る。
 
 ## Next Improvements (Codex MUST write)
-- Implement registry extensions in `src/tabular_analysis/registry/*` (T002).
-- Implement dataset_register local-first flow (T003).
-- Implement ClearML integration core (T005).
+- Implement registry extension points for preprocess/model/metrics (T002)
+- Build dataset_register local-first task and artifacts (T003)
+- Add ClearML integration core with UI contract compliance (T005)
 
 ## RESULT
-- NONCE: 3406554ddb644b9aa3083e25efab3f40
+- NONCE: 33846c0bf7e44f32a8e52d3f41dba2b0
 - RESULT: DONE
 - Evidence (files/commands):
-  - src/tabular_analysis/cli/_common.py (centralized Hydra config path).
-  - src/tabular_analysis/cli/*.py (use shared config path).
-- Verification:
-  - `.venv/bin/python -c "import tabular_analysis; import tabular_analysis.cli.pipeline"` (ok)
-  - `.venv/bin/python -m tabular_analysis.cli.pipeline --help` (ok)
+  - work/runs/_platform_scan.txt
+  - src/tabular_analysis/flows/preprocess.py (NotImplementedError message)
+  - src/tabular_analysis/registry/models.py (type hint)
+  - conf/pipeline.yaml (pipeline output dir)
+  - registry/README.md (registry pointer)
+  - python -c "import tabular_analysis; import tabular_analysis.cli.pipeline"
+  - python -m tabular_analysis.cli.pipeline --help
+- Verification: python -c "import tabular_analysis; import tabular_analysis.cli.pipeline" (ok); python -m tabular_analysis.cli.pipeline --help (ok)
 - Next Improvements:
-  - Implement registry extensions in `src/tabular_analysis/registry/*` (T002).
-  - Implement dataset_register local-first flow (T003).
-  - Implement ClearML integration core (T005).
+  - Implement registry extension points for preprocess/model/metrics (T002)
+  - Build dataset_register local-first task and artifacts (T003)
+  - Add ClearML integration core with UI contract compliance (T005)
 - Files changed:
-  - src/tabular_analysis/cli/_common.py
-  - src/tabular_analysis/cli/dataset_register.py
-  - src/tabular_analysis/cli/preprocess.py
-  - src/tabular_analysis/cli/train.py
-  - src/tabular_analysis/cli/infer.py
-  - src/tabular_analysis/cli/leaderboard.py
-  - src/tabular_analysis/cli/pipeline.py
+  - conf/pipeline.yaml
+  - registry/README.md
+  - src/tabular_analysis/flows/preprocess.py
+  - src/tabular_analysis/registry/models.py
+  - work/runs/_platform_scan.txt
   - work/tasks/T001_scaffold.md

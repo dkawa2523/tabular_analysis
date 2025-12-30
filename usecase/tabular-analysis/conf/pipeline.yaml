@@ -72,3 +72,5 @@ infer:
   batch_input_path: data/infer_batch.csv
   output_path: outputs/predictions.csv
 
+output:
+  out_dir: outputs/pipeline

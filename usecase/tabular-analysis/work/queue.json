@@ -2,7 +2,7 @@
   {
     "id": 1,
     "priority": "P0",
-    "status": "doing",
+    "status": "done",
     "title": "tabular-analysis: 基本骨組みの確定（CLI/パッケージ/Docs最小）",
     "path": "work/tasks/T001_scaffold.md",
     "skills": [
@@ -23,7 +23,7 @@
   {
     "id": 2,
     "priority": "P0",
-    "status": "todo",
+    "status": "done",
     "title": "registry: モデル/前処理/指標の拡張点を固定（LightGBM/Ridge/GPR + 標準前処理）",
     "path": "work/tasks/T002_registry.md",
     "skills": [

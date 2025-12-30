@@ -7,10 +7,11 @@
 編集: `src/tabular_analysis/registry/preprocessors.py`
 
 - `register_preprocessor(name: str, factory: Callable)`
-- `build_preprocessor(cfg) -> Transformer` を増やす
+- `get_preprocessor(name, cfg)` が factory を呼ぶ
 
 追加後:
-- `conf/preprocess/<name>.yaml` を作る
+- `conf/preprocess/<name>.yaml` を作る（分割する場合）
+- `conf/preprocess.yaml` の defaults に追加（分割する場合）
 - `docs/03_CLEARML_UI_CONTRACT.md` に plot/debug の扱いを追記（必要なら）
 
 ## 2) モデルを追加する
@@ -20,16 +21,17 @@
 - 学習に必要な前処理や feature importance などは `core/training.py` と `core/plots.py` に実装
 
 追加後:
-- `conf/model/<name>.yaml` を作る
+- `conf/model/<name>.yaml` を作る（分割する場合）
+- `conf/train.yaml` の defaults に追加（分割する場合）
 
 ## 3) 指標を追加する
 編集: `src/tabular_analysis/registry/metrics.py`
 
-- `METRICS[name] = callable(y_true, y_pred)`
+- `register_metric(name, fn)`
+- `get_metrics(primary, others)` で primary/others をまとめて取得
 
 ## 4) 可視化を追加する
 編集: `src/tabular_analysis/core/plots.py`
 
 - 追加してよい plot と、親（leaderboard）に出してよい plot を区別すること
 - heavy plot（SHAP 等）は train タスクに限定し、leaderboard は最小にする
-

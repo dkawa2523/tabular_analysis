@@ -15,4 +15,4 @@ def run_preprocess(cfg: DictConfig) -> None:
 
     TODO (Codex): implement in task T004.
     """
-    raise NotImplementedError
+    raise NotImplementedError("run_preprocess is not implemented yet (T004).")

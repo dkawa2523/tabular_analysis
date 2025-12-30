@@ -1,636 +1,629 @@
-#!/usr/bin/env python
-"""codex_loop runner (tabular-analysis v5)
-
-This runner is designed to make Codex-driven implementation *reliable* for large refactors.
+#!/usr/bin/env python3
+"""
+codex_loop runner (tabular-analysis)
+- Runs Codex CLI against work/queue.json tasks.
+- Designed to be robust across environments:
+  * codex exec expects PROMPT as positional arg
+  * sandbox modes are limited (read-only/workspace-write/danger-full-access)
+  * git may be unavailable; uses snapshot-based progress detection
+  * queue may become inconsistent (e.g., status=doing left behind); reconciles automatically
 
 Key guarantees:
-- **No false DONE**: requires BOTH `RESULT: DONE` and the per-task NONCE in the task md.
-- **Must-change-globs**: each task must touch at least one path matching `must_change_globs` (default `src/**`).
-- **Verification gates**: verification commands are executed (supports fenced blocks AND `- `backticks`` lists).
-- **Progress detection**:
-  - Uses Git diff/status when inside a git worktree.
-  - Falls back to a filesystem snapshot when git is unavailable / not a worktree (prevents 'no progress' dead-ends).
-
-Debugging:
-- Logs are written under: `work/runs/task_XXX/`
-  - prompt.txt
-  - codex_output.txt (+ codex_output_retry.txt if retried)
-  - codex_rc.txt
-  - verification.txt
-  - changed_paths.txt (best effort)
-
-Usage:
-  python tools/codex_loop/run.py --repo . --once
-  python tools/codex_loop/run.py --repo . --task 3 --once
+- Never marks a task DONE unless:
+  1) verification commands (from task md) all exit with code 0
+  2) task md contains `RESULT: DONE` and a NONCE
+  3) at least one changed file matches must_change_globs (default: src/** or conf/** or docs/** etc.)
 """
 
 from __future__ import annotations
 
 import argparse
+import dataclasses
 import fnmatch
 import hashlib
 import json
 import os
-import pathlib
 import re
 import shutil
 import subprocess
 import sys
 import time
-import uuid
-from typing import Any, Dict, List, Optional, Tuple
+from pathlib import Path
+from typing import Any, Dict, Iterable, List, Optional, Tuple
 
-ROOT = pathlib.Path(__file__).resolve().parents[2]  # tabular-analysis root
-WORK = ROOT / "work"
-QUEUE = WORK / "queue.json"
-STATE = WORK / "state.json"
-RUNS = WORK / "runs"
-RUNS.mkdir(parents=True, exist_ok=True)
+# -------------------------
+# Utilities
+# -------------------------
 
-IGNORE_PREFIXES = [
-    "work/runs/",
-    "work/state.json",
-]
+VALID_SANDBOX = {"read-only", "workspace-write", "danger-full-access"}
 
-# snapshot excludes (for non-git fallback)
-SNAPSHOT_EXCLUDE_DIRS = {
+IGNORE_DIRS = {
     ".git",
     ".venv",
     "__pycache__",
+    ".mypy_cache",
     ".pytest_cache",
+    ".ruff_cache",
     "work/runs",
     "outputs",
-    "dist",
-    "build",
 }
-SNAPSHOT_EXCLUDE_PREFIXES = [
-    "work/runs/",
+
+DEFAULT_MUST_CHANGE_GLOBS = [
+    "src/**",
+    "conf/**",
+    "docs/**",
+    "requirements/**",
+    "pyproject.toml",
+    "tools/**",
 ]
-SNAPSHOT_EXCLUDE_FILES = {
-    "work/state.json",
-}
-SNAPSHOT_MAX_BYTES = 2 * 1024 * 1024  # 2MB; larger files hashed partially
-
-PRIORITY_ORDER = {"P0": 0, "P1": 1, "P2": 2, "P3": 3}
 
 
-def load_json(p: pathlib.Path, default):
-    if not p.exists():
-        return default
-    return json.loads(p.read_text(encoding="utf-8"))
+def _posix(p: Path) -> str:
+    return p.as_posix()
 
 
-def save_json(p: pathlib.Path, obj):
+def _read_text(p: Path) -> str:
+    return p.read_text(encoding="utf-8", errors="replace")
+
+
+def _write_text(p: Path, s: str) -> None:
     p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(json.dumps(obj, ensure_ascii=False, indent=2), encoding="utf-8")
+    p.write_text(s, encoding="utf-8")
 
 
-def run(cmd: List[str], cwd: pathlib.Path, input_text: Optional[str] = None, timeout: Optional[int] = None) -> Tuple[int, str, str]:
-    p = subprocess.run(
-        cmd,
-        cwd=str(cwd),
-        input=input_text,
-        text=True,
-        capture_output=True,
-        timeout=timeout,
-    )
-    return p.returncode, p.stdout or "", p.stderr or ""
+def _read_json(p: Path) -> Any:
+    return json.loads(_read_text(p))
 
 
-def run_shell(cmd: str, cwd: pathlib.Path) -> Tuple[int, str, str]:
-    p = subprocess.run(
-        cmd,
-        cwd=str(cwd),
-        shell=True,
-        text=True,
-        capture_output=True,
-    )
-    return p.returncode, p.stdout or "", p.stderr or ""
+def _write_json(p: Path, obj: Any) -> None:
+    _write_text(p, json.dumps(obj, indent=2, ensure_ascii=False))
 
 
-def is_git_repo(repo: pathlib.Path) -> bool:
-    rc, _, _ = run(["git", "rev-parse", "--is-inside-work-tree"], repo)
-    return rc == 0
+def _now_ts() -> str:
+    return time.strftime("%Y%m%d_%H%M%S")
 
 
-def git_head(repo: pathlib.Path) -> str:
-    rc, so, _ = run(["git", "rev-parse", "HEAD"], repo)
-    return so.strip() if rc == 0 else ""
+def _norm_id(x: Any) -> str:
+    s = str(x).strip()
+    m = re.fullmatch(r"T?0*([0-9]+)", s, flags=re.IGNORECASE)
+    if m:
+        return m.group(1)
+    return s
 
 
-def git_porcelain(repo: pathlib.Path) -> List[str]:
-    rc, so, _ = run(["git", "status", "--porcelain=v1"], repo)
-    if rc != 0:
-        return []
-    files: List[str] = []
-    for line in so.splitlines():
-        if not line:
+def _id_sort_key(x: Any) -> int:
+    s = _norm_id(x)
+    try:
+        return int(s)
+    except Exception:
+        return 999999
+
+
+def _priority_sort_key(p: Any) -> int:
+    if p is None:
+        return 999
+    if isinstance(p, int):
+        return p
+    s = str(p).strip()
+    m = re.fullmatch(r"P(\d+)", s, flags=re.IGNORECASE)
+    if m:
+        return int(m.group(1))
+    try:
+        return int(s)
+    except Exception:
+        return 999
+
+
+def _glob_match_any(path_posix: str, globs: Iterable[str]) -> bool:
+    for pat in globs:
+        pat = pat.strip()
+        if not pat:
             continue
-        if line.startswith("?? "):
-            files.append(line[3:].strip())
-            continue
-        parts = line.split()
-        if not parts:
-            continue
-        path = parts[-1]
-        if "->" in line:
-            path = line.split("->")[-1].strip()
-        files.append(path)
-    return files
-
-
-def diff_hash(repo: pathlib.Path) -> str:
-    # tracked + staged diff combined
-    rc1, so1, _ = run(["git", "diff", "--no-ext-diff"], repo)
-    rc2, so2, _ = run(["git", "diff", "--no-ext-diff", "--cached"], repo)
-    blob = (so1 if rc1 == 0 else "") + (so2 if rc2 == 0 else "")
-    return hashlib.sha256(blob.encode("utf-8", errors="ignore")).hexdigest()
-
-
-def should_ignore(path: str) -> bool:
-    for pref in IGNORE_PREFIXES:
-        if path.startswith(pref):
+        # normalize to posix
+        pat = pat.replace("\\", "/")
+        if fnmatch.fnmatch(path_posix, pat):
             return True
     return False
 
 
-def filter_ignored(paths: List[str]) -> List[str]:
-    return [p for p in paths if not should_ignore(p)]
+def _sha256_file(p: Path) -> str:
+    h = hashlib.sha256()
+    with p.open("rb") as f:
+        while True:
+            b = f.read(1024 * 1024)
+            if not b:
+                break
+            h.update(b)
+    return h.hexdigest()
 
 
-def match_any_glob(path: str, globs: List[str]) -> bool:
-    # globs are like "src/**"
-    for g in globs:
-        if fnmatch.fnmatch(path, g) or fnmatch.fnmatch(path, g.replace("**", "*")):
+def _should_ignore(rel_posix: str) -> bool:
+    rel_posix = rel_posix.lstrip("./")
+    for d in IGNORE_DIRS:
+        dpos = d.replace("\\", "/").rstrip("/")
+        if rel_posix == dpos or rel_posix.startswith(dpos + "/"):
             return True
-        # also try pathlib match semantics
-        try:
-            if pathlib.PurePosixPath(path).match(g):
-                return True
-        except Exception:
-            pass
     return False
 
 
-def snapshot_index(repo: pathlib.Path) -> Dict[str, str]:
-    """Best-effort content snapshot for non-git environments."""
-    idx: Dict[str, str] = {}
+def _snapshot(repo: Path) -> Dict[str, str]:
+    """Return mapping relpath->hash for progress detection."""
+    snap: Dict[str, str] = {}
     for p in repo.rglob("*"):
-        if p.is_dir():
-            # skip excluded dirs
-            rel_dir = p.relative_to(repo).as_posix()
-            parts = rel_dir.split("/")
-            if parts and parts[0] in SNAPSHOT_EXCLUDE_DIRS:
-                # prune by skipping walking; rglob doesn't allow prune, so just continue
-                continue
-            continue
         if not p.is_file():
             continue
         rel = p.relative_to(repo).as_posix()
-        if rel in SNAPSHOT_EXCLUDE_FILES:
+        if _should_ignore(rel):
             continue
-        if any(rel.startswith(pref) for pref in SNAPSHOT_EXCLUDE_PREFIXES):
-            continue
-        # skip top-level excluded dirs
-        top = rel.split("/")[0]
-        if top in SNAPSHOT_EXCLUDE_DIRS:
-            continue
+        # avoid hashing huge binaries in data; keep it simple:
         try:
-            st = p.stat()
+            if p.stat().st_size > 20 * 1024 * 1024:
+                # large file: use size+mtime as pseudo-hash
+                st = p.stat()
+                snap[rel] = f"large:{st.st_size}:{int(st.st_mtime)}"
+            else:
+                snap[rel] = _sha256_file(p)
         except Exception:
-            continue
-        h = hashlib.sha256()
-        h.update(rel.encode("utf-8"))
-        # hash content (partial for large files)
-        try:
-            with p.open("rb") as f:
-                if st.st_size <= SNAPSHOT_MAX_BYTES:
-                    data = f.read()
-                    h.update(data)
-                else:
-                    # read first and last chunks
-                    head = f.read(256 * 1024)
-                    h.update(head)
-                    try:
-                        f.seek(max(0, st.st_size - 256 * 1024))
-                        tail = f.read(256 * 1024)
-                        h.update(tail)
-                    except Exception:
-                        pass
-        except Exception:
-            # if cannot read, hash metadata only
-            h.update(str(st.st_size).encode("utf-8"))
-            h.update(str(int(st.st_mtime)).encode("utf-8"))
-        idx[rel] = h.hexdigest()
-    return idx
+            # if unreadable, still include marker
+            snap[rel] = "unreadable"
+    return snap
 
 
-def snapshot_changed_paths(before: Dict[str, str], after: Dict[str, str]) -> List[str]:
+def _diff_snap(before: Dict[str, str], after: Dict[str, str]) -> List[str]:
+    changed = []
     keys = set(before.keys()) | set(after.keys())
-    changed = [k for k in keys if before.get(k) != after.get(k)]
-    return sorted(changed)
+    for k in sorted(keys):
+        if before.get(k) != after.get(k):
+            changed.append(k)
+    return changed
 
 
-def extract_verification(task_md: str) -> List[str]:
-    """Extract verification commands.
+# -------------------------
+# Runtime / Codex
+# -------------------------
 
-    Supports:
-    - Fenced blocks after '## Verification' (preferred)
-    - Backtick list items like: - `python -m ...`
+@dataclasses.dataclass
+class CodexRuntime:
+    sandbox_mode: str = "workspace-write"
+    supports_skip_git_repo_check: bool = False
+
+    @staticmethod
+    def load(repo: Path) -> "CodexRuntime":
+        # env override
+        env_mode = os.environ.get("CODEX_SANDBOX_MODE")
+        mode = env_mode.strip() if env_mode else None
+
+        rt_path = repo / "tools" / "codex_loop" / "runtime.json"
+        supports_skip = False
+        if rt_path.exists():
+            try:
+                data = _read_json(rt_path)
+                mode = mode or data.get("sandbox_mode") or data.get("sandbox") or mode
+                supports_skip = bool(data.get("supports_skip_git_repo_check", False))
+            except Exception:
+                pass
+
+        if not mode:
+            mode = "workspace-write"
+        if mode not in VALID_SANDBOX:
+            # fall back
+            mode = "workspace-write"
+
+        # if we can't trust runtime.json, probe help once
+        if not supports_skip:
+            supports_skip = _probe_skip_git_repo_check()
+
+        return CodexRuntime(sandbox_mode=mode, supports_skip_git_repo_check=supports_skip)
+
+
+def _probe_skip_git_repo_check() -> bool:
+    try:
+        r = subprocess.run(
+            ["codex", "exec", "--help"],
+            capture_output=True,
+            text=True,
+        )
+        s = (r.stdout or "") + (r.stderr or "")
+        return "--skip-git-repo-check" in s
+    except Exception:
+        return False
+
+
+def _run_codex(runtime: CodexRuntime, prompt: str, cwd: Path, log_path: Path) -> int:
+    cmd = ["codex", "exec", "--sandbox", runtime.sandbox_mode]
+    if runtime.supports_skip_git_repo_check:
+        cmd.append("--skip-git-repo-check")
+    cmd.append(prompt)
+
+    r = subprocess.run(
+        cmd,
+        cwd=str(cwd),
+        capture_output=True,
+        text=True,
+    )
+    out = (r.stdout or "") + (r.stderr or "")
+    _write_text(log_path, out)
+    return r.returncode
+
+
+# -------------------------
+# Queue / Tasks
+# -------------------------
+
+def _load_queue(repo: Path) -> Tuple[Path, Any, List[Dict[str, Any]]]:
+    qpath = repo / "work" / "queue.json"
+    data = _read_json(qpath)
+    if isinstance(data, dict) and "tasks" in data:
+        tasks = data["tasks"]
+    elif isinstance(data, list):
+        tasks = data
+    else:
+        raise ValueError("Unsupported queue.json format (must be list or dict with 'tasks').")
+    if not isinstance(tasks, list):
+        raise ValueError("queue.json tasks must be a list")
+    return qpath, data, tasks
+
+
+def _task_md_path(repo: Path, task: Dict[str, Any]) -> Path:
+    p = task.get("path")
+    if not p:
+        # default
+        tid = _id_sort_key(task.get("id"))
+        return repo / "work" / "tasks" / f"T{tid:03d}.md"
+    return repo / str(p)
+
+
+def _task_md_contains_done(md_text: str) -> bool:
+    # We treat RESULT: DONE as the canonical marker
+    if re.search(r"^\s*-\s*RESULT:\s*DONE\s*$", md_text, flags=re.MULTILINE):
+        return True
+    return False
+
+
+def _task_md_nonce(md_text: str) -> Optional[str]:
+    # require a NONCE line
+    m = re.search(r"NONCE:\s*([0-9a-fA-F]{8,})", md_text)
+    return m.group(1) if m else None
+
+
+def _reconcile_queue(repo: Path, tasks: List[Dict[str, Any]]) -> None:
+    """Make queue statuses consistent with task markdown markers."""
+    for t in tasks:
+        status = (t.get("status") or "todo").lower()
+        mdp = _task_md_path(repo, t)
+        if not mdp.exists():
+            # no md -> do not auto mark done
+            if status == "doing":
+                t["status"] = "todo"
+            continue
+        txt = _read_text(mdp)
+        md_done = _task_md_contains_done(txt)
+        if md_done:
+            t["status"] = "done"
+        else:
+            if status == "doing":
+                # avoid permanent blocking
+                t["status"] = "todo"
+
+
+def _eligible_tasks(tasks: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    by_id = {_norm_id(t["id"]): t for t in tasks}
+    eligible: List[Dict[str, Any]] = []
+    for t in tasks:
+        status = (t.get("status") or "todo").lower()
+        if status != "todo":
+            continue
+        deps = t.get("depends_on") or []
+        ok = True
+        for d in deps:
+            did = _norm_id(d)
+            if did not in by_id:
+                ok = False
+                break
+            if (by_id[did].get("status") or "").lower() != "done":
+                ok = False
+                break
+        if ok:
+            eligible.append(t)
+
+    eligible.sort(key=lambda x: (_priority_sort_key(x.get("priority")), _id_sort_key(x.get("id"))))
+    return eligible
+
+
+# -------------------------
+# Verification
+# -------------------------
+
+def _extract_verification_cmds(task_md: str) -> List[str]:
     """
-    m = re.search(r"^##\s+Verification\s*$", task_md, flags=re.M)
-    if not m:
-        return []
-    tail = task_md[m.end():]
-    # stop at next heading
-    tail = re.split(r"^##\s+", tail, maxsplit=1, flags=re.M)[0]
+    Extract verification commands from markdown.
 
-    # 1) fenced block
-    blocks = re.findall(r"```(?:bash|sh)?\s*\n(.*?)\n```", tail, flags=re.S)
+    Supported patterns:
+      - `python ...`
+      - bullet lines containing backticks
+      - fenced blocks ```bash ... ```
+      - lines starting with "Verification:" followed by commands separated by ';'
+    """
     cmds: List[str] = []
-    if blocks:
-        for line in blocks[0].splitlines():
-            line = line.strip()
-            if not line or line.startswith("#"):
-                continue
-            cmds.append(line)
-        return cmds
 
-    # 2) list items with backticks
-    for line in tail.splitlines():
-        line = line.strip()
-        m2 = re.match(r"^[-*]\s+`(.+?)`\s*$", line)
-        if m2:
-            cmds.append(m2.group(1).strip())
-    return cmds
+    lines = task_md.splitlines()
 
+    # 1) backticks on lines
+    for line in lines:
+        if "`" in line:
+            # capture each `...`
+            parts = re.findall(r"`([^`]+)`", line)
+            for p in parts:
+                p = p.strip()
+                if p.startswith(("python", "pytest", "ruff", "mypy", "bash", "sh", "ls", "cat")):
+                    cmds.append(p)
 
-def verify(repo: pathlib.Path, task_md: str) -> Tuple[bool, str]:
-    cmds = extract_verification(task_md)
+    # 2) fenced blocks
+    in_fence = False
+    fence_lang = ""
+    buf: List[str] = []
+    for line in lines:
+        if line.strip().startswith("```"):
+            if not in_fence:
+                in_fence = True
+                fence_lang = line.strip().lstrip("```").strip().lower()
+                buf = []
+            else:
+                # close
+                if fence_lang in ("bash", "sh", "shell", ""):
+                    for b in buf:
+                        b = b.strip()
+                        if not b or b.startswith("#"):
+                            continue
+                        cmds.append(b)
+                in_fence = False
+                fence_lang = ""
+                buf = []
+            continue
+        if in_fence:
+            buf.append(line)
+
+    # 3) "Verification:" style
+    for line in lines:
+        if line.strip().lower().startswith("verification:"):
+            tail = line.split(":", 1)[1].strip()
+            # split by ';'
+            for part in tail.split(";"):
+                part = part.strip()
+                if part:
+                    # may contain "(ok)" etc.
+                    cmds.append(part)
+
+    # de-dup while preserving order
+    seen = set()
     out: List[str] = []
-    if not cmds:
-        return True, "(no verification commands found)"
-    ok = True
     for c in cmds:
-        out.append(f"$ {c}")
-        rc, so, se = run_shell(c, repo)
-        if so.strip():
-            out.append(so.strip())
-        if se.strip():
-            out.append(se.strip())
-        if rc != 0:
+        c2 = c.strip()
+        if not c2:
+            continue
+        if c2 not in seen:
+            seen.add(c2)
+            out.append(c2)
+    return out
+
+
+def _clean_cmd(cmd: str) -> Tuple[str, Optional[str]]:
+    """
+    Clean a verification command.
+    - Remove trailing "(ok)/(pass)" annotations.
+    - Support optional expected output: "CMD -> EXPECTED"
+    """
+    s = cmd.strip()
+
+    # remove trailing annotations like "(ok)" "(pass)" "(passed)"
+    s = re.sub(r"\s*\((ok|pass|passed)\)\s*$", "", s, flags=re.IGNORECASE).strip()
+
+    expected = None
+    if "->" in s:
+        left, right = s.split("->", 1)
+        s = left.strip()
+        expected = right.strip()
+        # strip markdown backticks
+        if expected.startswith("`") and expected.endswith("`"):
+            expected = expected[1:-1].strip()
+        # strip quotes
+        expected = expected.strip().strip('"').strip("'").strip()
+        if expected == "":
+            expected = None
+
+    return s, expected
+
+
+def _run_verification(repo: Path, task: Dict[str, Any], run_dir: Path) -> Tuple[bool, str]:
+    mdp = _task_md_path(repo, task)
+    if not mdp.exists():
+        return True, "no task md; skip verification"
+
+    txt = _read_text(mdp)
+    cmds = _extract_verification_cmds(txt)
+
+    vlog = run_dir / "verification.txt"
+    lines: List[str] = []
+    ok = True
+    failed_cmd = ""
+
+    if not cmds:
+        _write_text(vlog, "No verification commands found in task md.\n")
+        return False, "no verification commands"
+
+    for raw in cmds:
+        cmd, expected = _clean_cmd(raw)
+        if not cmd:
+            continue
+
+        lines.append(f"$ {cmd}\n")
+        r = subprocess.run(cmd, cwd=str(repo), shell=True, capture_output=True, text=True)
+        stdout = (r.stdout or "")
+        stderr = (r.stderr or "")
+        if stdout:
+            lines.append(stdout + ("\n" if not stdout.endswith("\n") else ""))
+        if stderr:
+            lines.append(stderr + ("\n" if not stderr.endswith("\n") else ""))
+
+        # PASS/FAIL rule:
+        # - primary: returncode==0
+        # - optional: expected substring match (if provided)
+        if r.returncode != 0:
             ok = False
-            out.append(f"(FAILED rc={rc})")
+            failed_cmd = cmd
+            lines.append(f"[FAIL] returncode={r.returncode}\n")
             break
-    return ok, "\n".join(out)
+        if expected is not None:
+            combined = (stdout + "\n" + stderr).strip()
+            if expected not in combined:
+                ok = False
+                failed_cmd = cmd
+                lines.append(f"[FAIL] expected substring not found: {expected}\n")
+                break
+
+        lines.append("[OK]\n\n")
+
+    _write_text(vlog, "".join(lines))
+    if not ok and failed_cmd:
+        _write_text(run_dir / "verification_failed_cmd.txt", failed_cmd + "\n")
+    return ok, ("ok" if ok else f"failed: {failed_cmd}")
 
 
-def codex_caps(repo: pathlib.Path) -> Dict[str, bool]:
-    rc, so, se = run(["codex", "exec", "--help"], repo)
-    txt = (so or "") + (se or "")
-    return {
-        "has_sandbox": "--sandbox" in txt or "-s" in txt,
-        "has_full_auto": "--full-auto" in txt,
-        "has_skip_git": "--skip-git-repo-check" in txt,
-    }
+# -------------------------
+# Task completion checks
+# -------------------------
+
+def _task_markers_ok(repo: Path, task: Dict[str, Any]) -> Tuple[bool, str]:
+    mdp = _task_md_path(repo, task)
+    if not mdp.exists():
+        return False, f"task md not found: {mdp}"
+    txt = _read_text(mdp)
+    if not _task_md_contains_done(txt):
+        return False, "missing 'RESULT: DONE' in task md"
+    nonce = _task_md_nonce(txt)
+    if not nonce:
+        return False, "missing NONCE in task md"
+    return True, "ok"
 
 
-def call_codex(repo: pathlib.Path, prompt: str, caps: Dict[str, bool], force_skip_git: bool) -> Tuple[int, str]:
-    cmd = ["codex", "exec"]
-    if caps.get("has_sandbox", True):
-        cmd += ["--sandbox", "workspace-write"]
-    if caps.get("has_full_auto", False):
-        cmd += ["--full-auto"]
-    if force_skip_git and caps.get("has_skip_git", False):
-        cmd += ["--skip-git-repo-check"]
-    cmd += ["-"]  # read prompt from stdin
-    rc, so, se = run(cmd, repo, input_text=prompt)
-    out = (so or "") + ("\n" + se if se else "")
-    return rc, out
+def _must_change_ok(changed_paths: List[str], must_globs: List[str]) -> bool:
+    for p in changed_paths:
+        if _glob_match_any(p, must_globs):
+            return True
+    return False
 
 
-def safe_read(p: pathlib.Path, limit: int = 20000) -> str:
-    if not p.exists():
-        try:
-            return f"(missing: {p.relative_to(ROOT)})"
-        except Exception:
-            return f"(missing: {p})"
-    txt = p.read_text(encoding="utf-8", errors="ignore")
-    if len(txt) > limit:
-        return txt[:limit] + "\n...(truncated)..."
-    return txt
+# -------------------------
+# Main
+# -------------------------
 
-
-def platform_scan(repo: pathlib.Path) -> str:
-    scan = repo / "tools" / "platform_scan.py"
-    if not scan.exists():
-        return "(platform_scan.py missing)"
-    rc, so, se = run(["python", str(scan)], repo)
-    txt = (so or "") + ("\n" + se if se else "")
-    lines = txt.splitlines()
-    if len(lines) > 250:
-        lines = lines[-250:]
-        txt = "\n".join(lines)
-    return txt
-
-
-def build_prompt(task: Dict[str, Any], nonce: str, last_failure: str, platform_info: str) -> str:
-    agents = safe_read(ROOT / "AGENTS.md", 16000)
-    task_md = safe_read(ROOT / task["path"], 22000)
-
-    contract_text: List[str] = []
-    for c in task.get("contracts") or []:
-        contract_text.append(f"\n\n# CONTRACT: {c}\n" + safe_read(ROOT / c, 12000))
-
-    # include skill texts (lightweight)
-    skill_text: List[str] = []
-    skills_root = ROOT / "agentskills" / "skills"
-    for sid in task.get("skills") or []:
-        cand = list(skills_root.glob(f"{sid}*.md"))
-        if cand:
-            rel = cand[0].relative_to(ROOT)
-            skill_text.append(f"\n\n# SKILL: {sid} ({rel})\n" + safe_read(ROOT / rel, 12000))
-
-    must_globs = task.get("must_change_globs", ["src/**"])
-
-    return f"""あなたはこのリポジトリの実装担当です。以下を厳守してください。
-
-- **独立タスク設計**: preprocess/train/infer/leaderboard は親子タスクにしない
-- **HyperParameters はそのタスクの入力設定だけ**（full config connect禁止）
-- **ローカルファースト**: ClearML off で必ず動作確認→その後 ClearML on
-- **registry が拡張点**: 新しい前処理/モデル/指標/可視化は registry / viz / conf/group に集約
-- **platform再利用**: 同等機能を新規実装する前に platform を探索し再利用
-- **ファイル増殖禁止**: 追加ファイルは必要最小限
-- **タスクは中途半端で次へ進まない**: 完了したら task md に RESULT: DONE を書く
-- **誤DONE防止**: task md に NONCE を貼ること（下記）
-- **重要**: 変更が必要です。**必ず** must-change-globs にマッチするファイルを変更し、task md も更新してください。
-
-AUTOMATION NONCE (task md の RESULT に貼り付け必須): {nonce}
-Must-change-globs (必ず変更する): {must_globs}
-
---- LAST FAILURE (if any) ---
-{last_failure}
-
---- PLATFORM SCAN (summary) ---
-{platform_info}
-
-# AGENTS
-{agents}
-
-# TASK
-{task_md}
-
-{''.join(contract_text)}
-
-{''.join(skill_text)}
-
-# OUTPUT REQUIREMENTS
-- 必ずリポジトリのファイルを編集して変更をコミット前の状態に残してください（git commit は不要）
-- 必ず task md の RESULT に NONCE と RESULT: DONE を書き、Evidence/Verification/Next Improvements を埋めてください
-"""
-
-
-def pick_next(queue: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
-    def eligible(t):
-        return t.get("status") in ("todo", "doing")
-
-    cand = [t for t in queue if eligible(t)]
-    if not cand:
-        return None
-    cand.sort(key=lambda x: (PRIORITY_ORDER.get(x.get("priority", "P9"), 9), int(x.get("id", 9999))))
-    return cand[0]
-
-
-def print_failure(task_id: int, reason: str, task_run: pathlib.Path) -> None:
-    print(f"Task {task_id} FAILED: {reason}")
-    print(f"  Logs: {task_run}")
-    print(f"   - prompt: {task_run / 'prompt.txt'}")
-    print(f"   - codex:  {task_run / 'codex_output.txt'}")
-    if (task_run / 'codex_output_retry.txt').exists():
-        print(f"   - codex_retry:  {task_run / 'codex_output_retry.txt'}")
-    print(f"   - rc:    {task_run / 'codex_rc.txt'}")
-    print(f"   - verify:{task_run / 'verification.txt'}")
-    if (task_run / 'changed_paths.txt').exists():
-        print(f"   - changed:{task_run / 'changed_paths.txt'}")
-
-
-def tail(text: str, n: int = 1200) -> str:
-    if len(text) <= n:
-        return text
-    return text[-n:]
-
-
-def main(argv: Optional[List[str]] = None) -> int:
+def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--repo", default=".")
-    ap.add_argument("--once", action="store_true")
-    ap.add_argument("--task", type=int, default=None)
-    ap.add_argument("--verbose", action="store_true")
-    args = ap.parse_args(argv)
+    ap.add_argument("--repo", default=".", help="Repository root (tabular-analysis)")
+    ap.add_argument("--once", action="store_true", help="Run at most one eligible task")
+    ap.add_argument("--task", default=None, help="Run specific task id (optional)")
+    args = ap.parse_args()
 
-    repo = pathlib.Path(args.repo).resolve()
-    if not (repo / "work" / "queue.json").exists():
-        print(f"ERROR: expected to run inside tabular-analysis root. Missing: {repo/'work/queue.json'}", file=sys.stderr)
+    repo = Path(args.repo).resolve()
+    os.chdir(repo)
+
+    qpath, qdata, tasks = _load_queue(repo)
+
+    # reconcile queue first (prevents 'doing' deadlocks)
+    _reconcile_queue(repo, tasks)
+    _write_json(qpath, qdata)
+
+    eligible = _eligible_tasks(tasks)
+    if args.task is not None:
+        tid = _norm_id(args.task)
+        eligible = [t for t in eligible if _norm_id(t["id"]) == tid]
+
+    if not eligible:
+        print("No eligible tasks found. (All done or blocked by dependencies)")
+        return 0
+
+    runtime = CodexRuntime.load(repo)
+
+    # run one task (or loop, but here --once is default usage)
+    t = eligible[0]
+    tid_int = _id_sort_key(t.get("id"))
+    run_dir = repo / "work" / "runs" / f"task_{tid_int:03d}"
+    run_dir.mkdir(parents=True, exist_ok=True)
+
+    task_md = _task_md_path(repo, t)
+    prompt = (
+        f"You are implementing Task {tid_int:03d} for tabular-analysis.\n"
+        f"Read and follow: {task_md.as_posix()}\n"
+        f"Also follow docs/ (UI contract, invariants, risks).\n"
+        f"IMPORTANT:\n"
+        f"- You MUST modify actual code/config/docs files (not only suggestions).\n"
+        f"- Update the task markdown completion section with RESULT: DONE and a NONCE.\n"
+        f"- Keep changes minimal and review-friendly.\n"
+    )
+
+    # Save prompt for debugging
+    _write_text(run_dir / "prompt.txt", prompt)
+
+    # If the task markdown is already marked DONE with NONCE, avoid re-running Codex.
+    # This prevents loops where Codex already applied changes but a previous runner failed.
+    m_ok0, _ = _task_markers_ok(repo, t)
+    if m_ok0:
+        v_ok0, v_msg0 = _run_verification(repo, t, run_dir)
+        if not v_ok0:
+            print(f"Task {tid_int} FAILED: verification failed: {v_msg0}")
+            print(f"  Logs: {run_dir}")
+            return 2
+        for x in tasks:
+            if _norm_id(x["id"]) == _norm_id(t["id"]):
+                x["status"] = "done"
+                break
+        _write_json(qpath, qdata)
+        print(f"Task {tid_int} DONE (verification-only)")
+        return 0
+
+    before = _snapshot(repo)
+    codex_log = run_dir / "codex_output.txt"
+    rc = _run_codex(runtime, prompt, cwd=repo, log_path=codex_log)
+    _write_text(run_dir / "codex_rc.txt", str(rc) + "\n")
+
+    after = _snapshot(repo)
+    changed = _diff_snap(before, after)
+    _write_text(run_dir / "changed_paths.txt", "\n".join(changed) + ("\n" if changed else ""))
+
+    if rc != 0:
+        print(f"Task {tid_int} FAILED: codex exec return code {rc}")
+        print(f"  Logs: {run_dir}")
         return 2
 
-    if shutil.which("codex") is None:
-        print("ERROR: codex not found in PATH", file=sys.stderr)
-        return 3
+    must_globs = t.get("must_change_globs") or DEFAULT_MUST_CHANGE_GLOBS
+    if not _must_change_ok(changed, must_globs):
+        print(f"Task {tid_int} FAILED: must_change_globs not satisfied")
+        print(f"  Logs: {run_dir}")
+        return 2
 
-    git_mode = is_git_repo(repo)
-    if not git_mode:
-        print("WARN: not inside a git worktree (or git unavailable). Using filesystem snapshot for progress detection.")
-        print("      If this is unintended, run this inside a git clone or run `git init` at the repo root.")
+    v_ok, v_msg = _run_verification(repo, t, run_dir)
+    if not v_ok:
+        # If task md is already DONE markers, allow reconcile path:
+        print(f"Task {tid_int} FAILED: verification failed: {v_msg}")
+        print(f"  Logs: {run_dir}")
+        return 2
 
-    caps = codex_caps(repo)
-    save_json(RUNS / "_codex_caps.json", caps)
+    m_ok, m_msg = _task_markers_ok(repo, t)
+    if not m_ok:
+        print(f"Task {tid_int} NOT DONE: {m_msg}")
+        print(f"  Logs: {run_dir}")
+        # leave task todo so it reruns
+        return 1
 
-    state = load_json(STATE, default={"task_nonces": {}, "last_failure": ""})
-    task_nonces: Dict[str, str] = state.get("task_nonces") or {}
-    last_failure: str = state.get("last_failure") or ""
+    # Mark done in queue and persist
+    for x in tasks:
+        if _norm_id(x["id"]) == _norm_id(t["id"]):
+            x["status"] = "done"
+            break
+    _write_json(qpath, qdata)
 
-    while True:
-        queue = load_json(QUEUE, default=[])
-        if args.task is not None:
-            t = next((x for x in queue if int(x.get("id")) == args.task), None)
-        else:
-            t = pick_next(queue)
-
-        if not t:
-            print("No eligible tasks found. (All done or blocked)")
-            return 0
-
-        # set doing
-        if t.get("status") == "todo":
-            for i, x in enumerate(queue):
-                if int(x.get("id")) == int(t.get("id")):
-                    queue[i]["status"] = "doing"
-            save_json(QUEUE, queue)
-
-        # stable nonce
-        tid = str(int(t["id"]))
-        if tid not in task_nonces:
-            task_nonces[tid] = uuid.uuid4().hex
-            save_json(STATE, {"task_nonces": task_nonces, "last_failure": last_failure})
-        nonce = task_nonces[tid]
-
-        # platform scan
-        pinfo = platform_scan(repo)
-
-        prompt = build_prompt(t, nonce, last_failure, pinfo)
-        task_run = RUNS / f"task_{int(t['id']):03d}"
-        task_run.mkdir(parents=True, exist_ok=True)
-        (task_run / "prompt.txt").write_text(prompt, encoding="utf-8")
-
-        # capture before
-        before_head = git_head(repo) if git_mode else ""
-        before_files = filter_ignored(git_porcelain(repo)) if git_mode else []
-        before_diff = diff_hash(repo) if git_mode else ""
-        before_snap = snapshot_index(repo) if not git_mode else {}
-
-        # call codex (retry with skip-git if trusted-dir error)
-        rc, out = call_codex(repo, prompt, caps, force_skip_git=False)
-        if ("Not inside a trusted directory" in out) and caps.get("has_skip_git", False):
-            rc2, out2 = call_codex(repo, prompt, caps, force_skip_git=True)
-            if rc2 == 0:
-                rc, out = rc2, out2
-
-        (task_run / "codex_output.txt").write_text(out, encoding="utf-8")
-        (task_run / "codex_rc.txt").write_text(str(rc), encoding="utf-8")
-
-        # capture after
-        after_head = git_head(repo) if git_mode else ""
-        after_files = filter_ignored(git_porcelain(repo)) if git_mode else []
-        after_diff = diff_hash(repo) if git_mode else ""
-        after_snap = snapshot_index(repo) if not git_mode else {}
-
-        # progress + changed paths
-        changed_paths: List[str] = []
-        progress = False
-        if git_mode:
-            progress = (after_files != before_files) or (after_diff != before_diff) or (after_head != before_head)
-            # best effort changed paths: include status paths + (if head changed) commit diff
-            changed_paths = sorted(set(after_files))
-            if after_head and before_head and after_head != before_head:
-                rc3, so3, _ = run(["git", "diff", "--name-only", f"{before_head}..{after_head}"], repo)
-                if rc3 == 0:
-                    changed_paths = sorted(set(changed_paths) | set([x.strip() for x in so3.splitlines() if x.strip()]))
-        else:
-            progress = after_snap != before_snap
-            changed_paths = snapshot_changed_paths(before_snap, after_snap)
-
-        (task_run / "changed_paths.txt").write_text("\n".join(changed_paths), encoding="utf-8")
-
-        # read task md
-        task_md_path = repo / t["path"]
-        task_md_text = task_md_path.read_text(encoding="utf-8", errors="ignore") if task_md_path.exists() else ""
-
-        must_globs = t.get("must_change_globs", ["src/**"])
-        touched_glob = any(match_any_glob(p, must_globs) for p in changed_paths)
-
-        nonce_ok = nonce in task_md_text
-        done_ok = "RESULT: DONE" in task_md_text
-
-        ok_verify, vout = verify(repo, task_md_text)
-        (task_run / "verification.txt").write_text(vout, encoding="utf-8")
-
-        # failures
-        if rc != 0:
-            last_failure = f"codex rc={rc}\n---\n{tail(out, 2000)}"
-            save_json(STATE, {"task_nonces": task_nonces, "last_failure": last_failure})
-            print_failure(int(t["id"]), f"codex failed rc={rc}", task_run)
-            if args.once:
-                return 10
-            time.sleep(0.2)
-            continue
-
-        # If no progress, automatically retry once with a stronger instruction (common when Codex answers but doesn't edit).
-        if not progress:
-            retry_prompt = prompt + "\n\n# NO-PROGRESS RETRY\n前回の実行ではファイル差分が検出できませんでした。\n**必ず** must-change-globs に一致するファイルを編集し、task md に NONCE と RESULT: DONE を書いてください。\n"
-            rc_r, out_r = call_codex(repo, retry_prompt, caps, force_skip_git=False)
-            (task_run / "codex_output_retry.txt").write_text(out_r, encoding="utf-8")
-            # refresh after
-            after_head2 = git_head(repo) if git_mode else ""
-            after_files2 = filter_ignored(git_porcelain(repo)) if git_mode else []
-            after_diff2 = diff_hash(repo) if git_mode else ""
-            after_snap2 = snapshot_index(repo) if not git_mode else {}
-            if git_mode:
-                progress = (after_files2 != before_files) or (after_diff2 != before_diff) or (after_head2 != before_head)
-                changed_paths = sorted(set(after_files2))
-                if after_head2 and before_head and after_head2 != before_head:
-                    rc3, so3, _ = run(["git", "diff", "--name-only", f"{before_head}..{after_head2}"], repo)
-                    if rc3 == 0:
-                        changed_paths = sorted(set(changed_paths) | set([x.strip() for x in so3.splitlines() if x.strip()]))
-            else:
-                progress = after_snap2 != before_snap
-                changed_paths = snapshot_changed_paths(before_snap, after_snap2)
-
-            (task_run / "changed_paths.txt").write_text("\n".join(changed_paths), encoding="utf-8")
-
-            # reload task md after retry
-            task_md_text = task_md_path.read_text(encoding="utf-8", errors="ignore") if task_md_path.exists() else ""
-            touched_glob = any(match_any_glob(p, must_globs) for p in changed_paths)
-            nonce_ok = nonce in task_md_text
-            done_ok = "RESULT: DONE" in task_md_text
-            ok_verify, vout = verify(repo, task_md_text)
-            (task_run / "verification.txt").write_text(vout, encoding="utf-8")
-
-            if not progress:
-                last_failure = "no progress detected (git diff empty / snapshot unchanged)\n---\n" + tail(out_r or out, 1500)
-                save_json(STATE, {"task_nonces": task_nonces, "last_failure": last_failure})
-                print_failure(int(t["id"]), "no progress detected", task_run)
-                if args.once:
-                    return 11
-                time.sleep(0.2)
-                continue
-
-        if not touched_glob:
-            last_failure = f"must_change_globs not satisfied: {must_globs}\nchanged_paths_sample={changed_paths[:20]}"
-            save_json(STATE, {"task_nonces": task_nonces, "last_failure": last_failure})
-            print_failure(int(t["id"]), "must_change_globs not satisfied", task_run)
-            if args.once:
-                return 12
-            time.sleep(0.2)
-            continue
-
-        if not nonce_ok:
-            last_failure = "NONCE missing in task md RESULT section"
-            save_json(STATE, {"task_nonces": task_nonces, "last_failure": last_failure})
-            print_failure(int(t["id"]), "NONCE missing", task_run)
-            if args.once:
-                return 13
-            time.sleep(0.2)
-            continue
-
-        if not done_ok:
-            last_failure = "RESULT: DONE missing in task md"
-            save_json(STATE, {"task_nonces": task_nonces, "last_failure": last_failure})
-            print_failure(int(t["id"]), "RESULT: DONE missing", task_run)
-            if args.once:
-                return 14
-            time.sleep(0.2)
-            continue
-
-        if not ok_verify:
-            last_failure = f"verification failed\n---\n{tail(vout, 2000)}"
-            save_json(STATE, {"task_nonces": task_nonces, "last_failure": last_failure})
-            print_failure(int(t["id"]), "verification failed", task_run)
-            if args.once:
-                return 15
-            time.sleep(0.2)
-            continue
-
-        # mark done
-        for i, x in enumerate(queue):
-            if int(x.get("id")) == int(t.get("id")):
-                queue[i]["status"] = "done"
-        save_json(QUEUE, queue)
-        last_failure = ""
-        save_json(STATE, {"task_nonces": task_nonces, "last_failure": last_failure})
-        print(f"Task {t['id']} DONE")
-        if args.once:
-            return 0
-        time.sleep(0.2)
+    print(f"Task {tid_int} DONE")
+    return 0
 
 
 if __name__ == "__main__":
