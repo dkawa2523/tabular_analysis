@@ -1,0 +1,15 @@
+defaults:
+  - common
+  - _self_
+
+run:
+  clearml:
+    project_name: MFG/${usecase_id}/99_pipeline
+    task_name: pipeline
+    tags: [pipeline]
+
+pipeline:
+  include_infer: false
+  infer_mode: batch
+  infer_model_id: ""
+  run_steps_locally: false

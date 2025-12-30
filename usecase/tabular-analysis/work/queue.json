@@ -1,0 +1,333 @@
+[
+  {
+    "id": 1,
+    "priority": "P0",
+    "status": "doing",
+    "title": "tabular-analysis: 基本骨組みの確定（CLI/パッケージ/Docs最小）",
+    "path": "work/tasks/T001_scaffold.md",
+    "skills": [
+      "S10_ROUTING",
+      "S40_ARCHITECTURE",
+      "S44",
+      "S45",
+      "S95_CODE_REVIEW"
+    ],
+    "contracts": [
+      "docs/01_POLYREPO_INTENT.md",
+      "docs/03_CLEARML_UI_CONTRACT.md",
+      "AGENTS.md",
+      "docs/09_RISKS_AND_MITIGATIONS.md",
+      "docs/10_PLATFORM_TEMPLATE_USAGE.md"
+    ]
+  },
+  {
+    "id": 2,
+    "priority": "P0",
+    "status": "todo",
+    "title": "registry: モデル/前処理/指標の拡張点を固定（LightGBM/Ridge/GPR + 標準前処理）",
+    "path": "work/tasks/T002_registry.md",
+    "skills": [
+      "S44",
+      "S45",
+      "S49_REGISTRY_EXTENSIONS",
+      "S95_CODE_REVIEW"
+    ],
+    "contracts": [
+      "docs/05_REGISTRY_EXTENSION.md",
+      "docs/09_RISKS_AND_MITIGATIONS.md",
+      "docs/10_PLATFORM_TEMPLATE_USAGE.md"
+    ],
+    "depends_on": [
+      1
+    ]
+  },
+  {
+    "id": 3,
+    "priority": "P0",
+    "status": "todo",
+    "title": "dataset_register タスク（local first + ClearML Dataset optional）",
+    "path": "work/tasks/T003_dataset_register.md",
+    "skills": [
+      "S40_ARCHITECTURE",
+      "S44",
+      "S45",
+      "S46_CLEARML_UX"
+    ],
+    "contracts": [
+      "docs/03_CLEARML_UI_CONTRACT.md",
+      "docs/06_ARTIFACT_CONTRACT.md",
+      "docs/09_RISKS_AND_MITIGATIONS.md",
+      "docs/10_PLATFORM_TEMPLATE_USAGE.md"
+    ],
+    "depends_on": [
+      1,
+      2
+    ]
+  },
+  {
+    "id": 4,
+    "priority": "P0",
+    "status": "todo",
+    "title": "preprocess タスク（bundle + summary + preprocessed dataset）",
+    "path": "work/tasks/T004_preprocess.md",
+    "skills": [
+      "S44",
+      "S45",
+      "S46_CLEARML_UX",
+      "S49_REGISTRY_EXTENSIONS"
+    ],
+    "contracts": [
+      "docs/03_CLEARML_UI_CONTRACT.md",
+      "docs/06_ARTIFACT_CONTRACT.md",
+      "docs/09_RISKS_AND_MITIGATIONS.md",
+      "docs/10_PLATFORM_TEMPLATE_USAGE.md"
+    ],
+    "depends_on": [
+      2,
+      3
+    ]
+  },
+  {
+    "id": 5,
+    "priority": "P0",
+    "status": "todo",
+    "title": "ClearML統合の核（init/connect_hparams/properties/artifacts/plots/debug）",
+    "path": "work/tasks/T005_clearml_integration_core.md",
+    "skills": [
+      "S44",
+      "S45",
+      "S46_CLEARML_UX",
+      "S95_CODE_REVIEW"
+    ],
+    "contracts": [
+      "docs/03_CLEARML_UI_CONTRACT.md",
+      "docs/09_RISKS_AND_MITIGATIONS.md",
+      "docs/10_PLATFORM_TEMPLATE_USAGE.md"
+    ],
+    "depends_on": [
+      1
+    ]
+  },
+  {
+    "id": 6,
+    "priority": "P0",
+    "status": "todo",
+    "title": "train コア（CV + metrics + model save）",
+    "path": "work/tasks/T006_train_core.md",
+    "skills": [
+      "S44",
+      "S45",
+      "S49_REGISTRY_EXTENSIONS",
+      "S95_CODE_REVIEW"
+    ],
+    "contracts": [
+      "docs/06_ARTIFACT_CONTRACT.md",
+      "docs/09_RISKS_AND_MITIGATIONS.md",
+      "docs/10_PLATFORM_TEMPLATE_USAGE.md"
+    ],
+    "depends_on": [
+      2
+    ]
+  },
+  {
+    "id": 7,
+    "priority": "P0",
+    "status": "todo",
+    "title": "train タスク（独立タスク、ClearML UI出力、Model registry）",
+    "path": "work/tasks/T007_train_task.md",
+    "skills": [
+      "S44",
+      "S45",
+      "S46_CLEARML_UX",
+      "S49_REGISTRY_EXTENSIONS"
+    ],
+    "contracts": [
+      "docs/03_CLEARML_UI_CONTRACT.md",
+      "docs/06_ARTIFACT_CONTRACT.md",
+      "docs/09_RISKS_AND_MITIGATIONS.md",
+      "docs/10_PLATFORM_TEMPLATE_USAGE.md"
+    ],
+    "depends_on": [
+      5,
+      6,
+      4
+    ]
+  },
+  {
+    "id": 8,
+    "priority": "P0",
+    "status": "todo",
+    "title": "infer タスク（single/batch/optimize、逆変換、成果物/plots）",
+    "path": "work/tasks/T008_infer_task.md",
+    "skills": [
+      "S40_ARCHITECTURE",
+      "S44",
+      "S45",
+      "S46_CLEARML_UX"
+    ],
+    "contracts": [
+      "docs/03_CLEARML_UI_CONTRACT.md",
+      "docs/06_ARTIFACT_CONTRACT.md",
+      "docs/09_RISKS_AND_MITIGATIONS.md",
+      "docs/10_PLATFORM_TEMPLATE_USAGE.md"
+    ],
+    "depends_on": [
+      5,
+      7
+    ]
+  },
+  {
+    "id": 9,
+    "priority": "P0",
+    "status": "todo",
+    "title": "leaderboard: ClearMLから学習タスクを集約するクエリ実装（task_id基準）",
+    "path": "work/tasks/T009_leaderboard_query.md",
+    "skills": [
+      "S44",
+      "S45",
+      "S46_CLEARML_UX",
+      "S47_LEADERBOARD"
+    ],
+    "contracts": [
+      "docs/03_CLEARML_UI_CONTRACT.md",
+      "docs/09_RISKS_AND_MITIGATIONS.md",
+      "docs/10_PLATFORM_TEMPLATE_USAGE.md"
+    ],
+    "depends_on": [
+      5,
+      7
+    ]
+  },
+  {
+    "id": 10,
+    "priority": "P0",
+    "status": "todo",
+    "title": "leaderboard タスク（比較・可視化・推奨model_id）",
+    "path": "work/tasks/T010_leaderboard_task.md",
+    "skills": [
+      "S44",
+      "S45",
+      "S46_CLEARML_UX",
+      "S47_LEADERBOARD",
+      "S95_CODE_REVIEW"
+    ],
+    "contracts": [
+      "docs/03_CLEARML_UI_CONTRACT.md",
+      "docs/06_ARTIFACT_CONTRACT.md",
+      "docs/09_RISKS_AND_MITIGATIONS.md",
+      "docs/10_PLATFORM_TEMPLATE_USAGE.md"
+    ],
+    "depends_on": [
+      9
+    ]
+  },
+  {
+    "id": 11,
+    "priority": "P0",
+    "status": "todo",
+    "title": "pipeline (local-first): preprocess×model を複数実行して leaderboard に task_id を渡す",
+    "path": "work/tasks/T011_pipeline_local.md",
+    "skills": [
+      "S40_ARCHITECTURE",
+      "S44",
+      "S45",
+      "S48_PIPELINE_INDEPENDENT_TASKS"
+    ],
+    "contracts": [
+      "docs/07_PIPELINE_CONTRACT.md",
+      "docs/09_RISKS_AND_MITIGATIONS.md",
+      "docs/10_PLATFORM_TEMPLATE_USAGE.md"
+    ],
+    "depends_on": [
+      3,
+      4,
+      7,
+      10
+    ]
+  },
+  {
+    "id": 12,
+    "priority": "P1",
+    "status": "todo",
+    "title": "ClearML Agent / template clone 実行の下準備（set_script/queue/clone契約）",
+    "path": "work/tasks/T012_agent_support.md",
+    "skills": [
+      "S44",
+      "S45",
+      "S46_CLEARML_UX",
+      "S48_PIPELINE_INDEPENDENT_TASKS"
+    ],
+    "contracts": [
+      "docs/07_AGENT_EXECUTION.md",
+      "docs/09_RISKS_AND_MITIGATIONS.md",
+      "docs/10_PLATFORM_TEMPLATE_USAGE.md"
+    ],
+    "depends_on": [
+      11
+    ]
+  },
+  {
+    "id": 13,
+    "priority": "P1",
+    "status": "todo",
+    "title": "smoke/doctor: ローカルで end-to-end 検証（ClearML off→on）",
+    "path": "work/tasks/T013_smoke_doctor.md",
+    "skills": [
+      "S44",
+      "S45",
+      "S70_TESTING",
+      "S95_CODE_REVIEW"
+    ],
+    "contracts": [
+      "AGENTS.md",
+      "docs/09_RISKS_AND_MITIGATIONS.md",
+      "docs/10_PLATFORM_TEMPLATE_USAGE.md"
+    ],
+    "depends_on": [
+      11
+    ]
+  },
+  {
+    "id": 14,
+    "priority": "P1",
+    "status": "todo",
+    "title": "ドキュメント仕上げ（非DS導線/開発者拡張/レビュー観点）",
+    "path": "work/tasks/T014_docs_finish.md",
+    "skills": [
+      "S40_ARCHITECTURE",
+      "S44",
+      "S45",
+      "S95_CODE_REVIEW"
+    ],
+    "contracts": [
+      "docs/00_READING_ORDER.md",
+      "docs/09_RISKS_AND_MITIGATIONS.md",
+      "docs/10_PLATFORM_TEMPLATE_USAGE.md"
+    ],
+    "depends_on": [
+      10,
+      11
+    ]
+  },
+  {
+    "id": 15,
+    "priority": "P1",
+    "status": "todo",
+    "title": "不要コード・不要ファイル削除（tabular-analysis内のprune task）",
+    "path": "work/tasks/T015_prune_cleanup.md",
+    "skills": [
+      "S44",
+      "S45",
+      "S50_CLEANUP_PRUNE",
+      "S95_CODE_REVIEW"
+    ],
+    "contracts": [
+      "AGENTS.md",
+      "docs/09_RISKS_AND_MITIGATIONS.md",
+      "docs/10_PLATFORM_TEMPLATE_USAGE.md"
+    ],
+    "depends_on": [
+      14
+    ]
+  }
+]

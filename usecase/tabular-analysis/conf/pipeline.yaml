@@ -1,0 +1,74 @@
+# Pipeline config (tabular-analysis)
+defaults:
+  - run: local
+  - _self_
+
+usecase_id: tabular-analysis
+
+data:
+  # Either dataset_id OR local_path
+  dataset_id: null
+  local_path: data/example.csv
+  format: csv
+  target_col: target
+  id_col: null
+  group_col: null
+  feature_cols: null   # null = auto (all except target/id)
+
+pipeline:
+  # grid of preprocessing recipes (each becomes an independent preprocess task)
+  preprocess_grid:
+    - name: std_default
+      numeric_imputer: mean
+      categorical_imputer: most_frequent
+      categorical_encoder: onehot
+      numeric_scaler: standard
+      target_transform: none
+
+  # list of model configs (each becomes an independent train task)
+  models:
+    - name: lightgbm
+      params:
+        n_estimators: 300
+        learning_rate: 0.05
+        num_leaves: 31
+        random_state: 42
+    - name: ridge
+      params:
+        alpha: 1.0
+        random_state: 42
+    - name: gpr
+      params:
+        alpha: 1.0e-10
+        normalize_y: true
+        random_state: 42
+
+train:
+  split:
+    kind: kfold
+    n_splits: 5
+    shuffle: true
+    seed: 42
+  metrics:
+    primary: rmse
+    others: [mae, r2]
+  save_oof_predictions: true
+
+leaderboard:
+  top_k: 10
+  primary_metric: rmse
+  direction: minimize
+  # For manual usage (pipeline will fill automatically)
+  task_ids: []
+  filter:
+    project: null
+    tags: []
+
+infer:
+  enabled: false
+  mode: batch   # single | batch | optimize
+  model_id: null
+  # for batch
+  batch_input_path: data/infer_batch.csv
+  output_path: outputs/predictions.csv
+

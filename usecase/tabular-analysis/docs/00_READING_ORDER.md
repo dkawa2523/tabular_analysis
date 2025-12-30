@@ -1,0 +1,13 @@
+# docs 読む順番（tabular-analysis）
+
+1. `01_POLYREPO_INTENT.md`  
+2. `02_WORKFLOW_OVERVIEW.md`  
+3. `03_CLEARML_UI_CONTRACT.md`  
+4. `04_CONFIG_HYDRA.md`  
+5. `05_REGISTRY_EXTENSION.md`  
+6. `06_ARTIFACT_CONTRACT.md`  
+7. `07_PIPELINE_CONTRACT.md`  
+8. `09_RISKS_AND_MITIGATIONS.md`（想定課題と対応策）  
+9. `07_AGENT_EXECUTION.md`  
+10. `08_FUTURE_EXTENSIONS.md`（将来拡張のガード）
+11. `13_TROUBLESHOOTING.md`（詰まったときのログ確認）

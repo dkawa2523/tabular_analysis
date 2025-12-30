@@ -13,6 +13,9 @@ def main():
     ap.add_argument("--repo", default=".")
     args = ap.parse_args()
     repo = pathlib.Path(args.repo).resolve()
+    platform_src = repo.parent / "ml-platform" / "src"
+    if platform_src.exists():
+        sys.path.insert(0, str(platform_src))
 
     missing = []
     for r in REQUIRED:

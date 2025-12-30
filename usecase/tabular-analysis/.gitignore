@@ -1,0 +1,10 @@
+.venv/
+__pycache__/
+*.pyc
+outputs/
+data/*.parquet
+data/*.csv
+data/*.json
+.codex_exec_selfcheck.txt
+work/state.json
+work/runs/

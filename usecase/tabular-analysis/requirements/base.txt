@@ -1,0 +1,19 @@
+# Minimal dependencies for tabular-analysis usecase
+# NOTE: ml-platform is installed separately (editable) in README
+hydra-core>=1.3
+omegaconf>=2.3
+pandas>=2.0
+numpy>=1.24
+scikit-learn>=1.3
+joblib>=1.3
+matplotlib>=3.8
+plotly>=5.20
+
+# ML models
+lightgbm>=4.0
+# xgboost, catboost are optional (future)
+# xgboost>=2.0
+# catboost>=1.2
+
+# ClearML
+clearml>=1.16

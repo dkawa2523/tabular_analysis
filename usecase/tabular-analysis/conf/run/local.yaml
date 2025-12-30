@@ -1,0 +1,14 @@
+mode: local
+clearml:
+  enabled: false
+  project_root: "MFG/TabularAnalysis"
+  tags: ["tabular-analysis"]
+  queue: "default"
+  # for UI clone / agent
+  code:
+    set_script: false
+    repository: null
+    branch: null
+    entry_point: null
+    working_dir: null
+  reuse_task: false

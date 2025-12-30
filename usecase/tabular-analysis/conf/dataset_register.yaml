@@ -1,0 +1,15 @@
+# dataset_register task config
+defaults:
+  - run: local
+  - _self_
+
+usecase_id: tabular-analysis
+
+data:
+  local_path: data/example.csv
+  format: csv
+  dataset_name: "tabular-analysis-raw"
+  dataset_project: "MFG/TabularAnalysis/01_dataset"
+
+output:
+  out_dir: outputs/dataset_register

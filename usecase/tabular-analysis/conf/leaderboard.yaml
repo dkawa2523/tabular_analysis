@@ -1,0 +1,18 @@
+# leaderboard task config
+defaults:
+  - run: local
+  - _self_
+
+usecase_id: tabular-analysis
+
+leaderboard:
+  task_ids: []   # required for base mode
+  filter:
+    project: null
+    tags: []
+  primary_metric: rmse
+  direction: minimize
+  top_k: 10
+
+output:
+  out_dir: outputs/leaderboard

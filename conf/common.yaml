@@ -1,0 +1,30 @@
+usecase_id: template
+dataset_id: ""
+
+seed: 42
+
+data:
+  dataset_id: ${dataset_id}
+
+eval:
+  metric: primary
+  greater_is_better: true
+
+run:
+  clearml:
+    enabled: false
+    enqueue: false
+    queue_name: default
+    project_name: MFG/${usecase_id}/__unset__
+    task_name: __unset__
+    tags: []
+    script:
+      repository: ""
+      branch: ""
+      entry_point: ""
+      working_dir: ""
+    ui_clone:
+      repository: ${run.clearml.script.repository}
+      branch: ${run.clearml.script.branch}
+      entry_point: ${run.clearml.script.entry_point}
+      working_dir: ${run.clearml.script.working_dir}

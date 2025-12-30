@@ -21,7 +21,7 @@ ls -la src/usecase/cli
 ```
 
 ## Completion Evidence (MUST include NONCE)
-- NONCE:
-- Files changed:
-- Verification result:
-- Notes:
+- NONCE: ca471cef18e24affb44b17851ec57798
+- Files changed: `src/usecase/cli/infer.py`, `pyproject.toml`, `docs/15_CODEMAP.md`, `usecase/__init__.py`
+- Verification result: `python -m compileall -q .` (pass), `python -c "import usecase"` (pass), `ls -la src/usecase/cli` (pass)
+- Notes: Added root-level `usecase` package shim for local imports.

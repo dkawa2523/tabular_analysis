@@ -5,6 +5,7 @@ import argparse, pathlib, shutil
 DEFAULT_PATTERNS = [
     "outputs",
     "multirun",
+    ".clearml_cache",
     "**/__pycache__",
     "*.pyc",
     ".codex_exec_selfcheck.txt",
@@ -17,19 +18,23 @@ def iter_matches(repo: pathlib.Path, pattern: str):
         return repo.rglob(pattern.replace("**/", ""))
     return repo.glob(pattern)
 
+def _skip_path(path: pathlib.Path) -> bool:
+    parts = path.parts
+    return ".git" in parts or ".venv" in parts
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--repo", default=".")
-    ap.add_argument("--dry-run", action="store_true", default=True)
+    ap.add_argument("--dry-run", action="store_true", default=False)
     ap.add_argument("--apply", action="store_true")
     args = ap.parse_args()
     repo = pathlib.Path(args.repo).resolve()
-    dry = not args.apply
+    dry = args.dry_run or not args.apply
 
     targets = set()
     for pat in DEFAULT_PATTERNS:
         for p in iter_matches(repo, pat):
-            if p.is_dir() and p.name in (".git", ".venv"):
+            if _skip_path(p):
                 continue
             targets.add(p)
 

@@ -20,7 +20,7 @@ find conf -type f | sort | head -200
 ```
 
 ## Completion Evidence (MUST include NONCE)
-- NONCE:
-- Files changed:
-- Verification result:
-- Notes:
+- NONCE: 13636a48f8a54ef3bf845b6347c91d01
+- Files changed: `conf/common.yaml`, `conf/pipeline.yaml`, `conf/preprocess.yaml`, `conf/train_parent.yaml`, `conf/train_model.yaml`, `conf/infer.yaml`, `conf/overrides/example.yaml`, `work/tasks/T002_solution_hydra_conf.md`
+- Verification result: `python -m compileall -q .` (pass), `find conf -type f | sort | head -200` (pass)
+- Notes: Added task-root Hydra configs with usecase-scoped ClearML project names and dataset_id entry.

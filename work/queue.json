@@ -2,7 +2,7 @@
   {
     "id": 1,
     "priority": "P0",
-    "status": "todo",
+    "status": "done",
     "title": "Solution skeleton: usecase package layout + CLI stubs + platform dependency wiring",
     "path": "work/tasks/T001_solution_skeleton.md",
     "skills": [
@@ -22,7 +22,7 @@
   {
     "id": 2,
     "priority": "P0",
-    "status": "todo",
+    "status": "done",
     "title": "Hydra conf for usecase: project naming + dataset_id entry + task-specific params",
     "path": "work/tasks/T002_solution_hydra_conf.md",
     "skills": [
@@ -42,7 +42,7 @@
   {
     "id": 3,
     "priority": "P0",
-    "status": "todo",
+    "status": "done",
     "title": "ClearML execution modes: local/logging/agent/ui-clone wiring (set_script config)",
     "path": "work/tasks/T003_solution_clearml_modes.md",
     "skills": [
@@ -65,7 +65,7 @@
   {
     "id": 4,
     "priority": "P0",
-    "status": "todo",
+    "status": "done",
     "title": "Usecase pipeline definition: dataset->preprocess->train_parent (+ optional inference)",
     "path": "work/tasks/T004_solution_pipeline.md",
     "skills": [
@@ -87,7 +87,7 @@
   {
     "id": 5,
     "priority": "P1",
-    "status": "todo",
+    "status": "done",
     "title": "Usecase registry extensions (optional): add models/preprocessors/metrics without forking platform",
     "path": "work/tasks/T005_solution_registry_extensions.md",
     "skills": [
@@ -107,7 +107,7 @@
   {
     "id": 6,
     "priority": "P1",
-    "status": "todo",
+    "status": "done",
     "title": "Smoke tests & doctor for solution; minimal local pipeline dry-run",
     "path": "work/tasks/T006_solution_tests_doctor.md",
     "skills": [
@@ -128,7 +128,7 @@
   {
     "id": 7,
     "priority": "P1",
-    "status": "todo",
+    "status": "done",
     "title": "Cleanup and docs finalize (usecase guide + CODEMAP)",
     "path": "work/tasks/T007_solution_cleanup_docs.md",
     "skills": [

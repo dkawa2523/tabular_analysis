@@ -1,0 +1,54 @@
+{
+  "skills": [
+    {
+      "id": "S10_ROUTING",
+      "path": "agentskills/skills/S10_ROUTING.md"
+    },
+    {
+      "id": "S40_ARCHITECTURE",
+      "path": "agentskills/skills/S40_ARCHITECTURE.md"
+    },
+    {
+      "id": "S44",
+      "name": "Risks & mitigations checklist",
+      "path": "agentskills/skills/S44_RISK_MITIGATION.md"
+    },
+    {
+      "id": "S45",
+      "name": "Platform reuse & adapter strategy",
+      "path": "agentskills/skills/S45_PLATFORM_REUSE.md"
+    },
+    {
+      "id": "S46_CLEARML_UX",
+      "path": "agentskills/skills/S46_CLEARML_UX.md"
+    },
+    {
+      "id": "S47_LEADERBOARD",
+      "path": "agentskills/skills/S47_LEADERBOARD.md"
+    },
+    {
+      "id": "S48_PIPELINE_INDEPENDENT_TASKS",
+      "path": "agentskills/skills/S48_PIPELINE_INDEPENDENT_TASKS.md"
+    },
+    {
+      "id": "S49_REGISTRY_EXTENSIONS",
+      "path": "agentskills/skills/S49_REGISTRY_EXTENSIONS.md"
+    },
+    {
+      "id": "S50_CLEANUP_PRUNE",
+      "path": "agentskills/skills/S50_CLEANUP_PRUNE.md"
+    },
+    {
+      "id": "S70_TESTING",
+      "path": "agentskills/skills/S70_TESTING.md"
+    },
+    {
+      "id": "S95_CODE_REVIEW",
+      "path": "agentskills/skills/S95_CODE_REVIEW.md"
+    },
+    {
+      "id": "S98_RELEASE_CHECKLIST",
+      "path": "agentskills/skills/S98_RELEASE_CHECKLIST.md"
+    }
+  ]
+}

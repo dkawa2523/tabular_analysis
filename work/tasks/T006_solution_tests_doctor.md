@@ -19,7 +19,7 @@ pytest -q || true
 ```
 
 ## Completion Evidence (MUST include NONCE)
-- NONCE:
-- Files changed:
-- Verification result:
-- Notes:
+- NONCE: facea8a85a414d88af88effd524c90d1
+- Files changed: tools/doctor.py, tests/test_placeholder.py, work/tasks/T006_solution_tests_doctor.md
+- Verification result: python -m compileall -q . (pass); python tools/doctor.py (pass); pytest -q || true (pass)
+- Notes: Added a local pipeline dry-run smoke test that avoids hard hydra/omegaconf deps when missing.

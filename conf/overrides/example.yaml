@@ -1,0 +1,5 @@
+usecase_id: demo
+dataset_id: ds_demo_v1
+run:
+  clearml:
+    enabled: true

@@ -20,7 +20,7 @@ python -m usecase.cli.pipeline --help || true
 ```
 
 ## Completion Evidence (MUST include NONCE)
-- NONCE:
-- Files changed:
-- Verification result:
-- Notes:
+- NONCE: c511efeec3c04c50b9909fe6ae537807
+- Files changed: `conf/pipeline.yaml`, `src/usecase/cli/pipeline.py`, `work/tasks/T004_solution_pipeline.md`
+- Verification result: `python -m compileall -q .` (pass), `python -m usecase.cli.pipeline --help || true` (pass)
+- Notes: Defined ClearML PipelineController steps with dataset->preprocess->train_parent (+ optional infer) and step_task_ids artifact output.

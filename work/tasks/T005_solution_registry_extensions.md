@@ -17,7 +17,7 @@ python -c "import usecase; print('ok')"
 ```
 
 ## Completion Evidence (MUST include NONCE)
-- NONCE:
-- Files changed:
-- Verification result:
-- Notes:
+- NONCE: 53f9ac72b7954ba4b5f7745a444a3f78
+- Files changed: src/usecase/registry_extensions.py, src/usecase/__init__.py, docs/15_CODEMAP.md, work/tasks/T005_solution_registry_extensions.md
+- Verification result: python -m compileall -q . (pass); python -c "import usecase; print('ok')" (ok)
+- Notes: Registered usecase-prefixed model/preprocessor/metric via platform registry helpers.

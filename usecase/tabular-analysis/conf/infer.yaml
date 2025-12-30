@@ -1,0 +1,25 @@
+# inference task config
+defaults:
+  - run: local
+  - _self_
+
+usecase_id: tabular-analysis
+
+model:
+  model_id: null   # ClearML Model id
+  local_path: null # optional local model file
+
+infer:
+  mode: single   # single | batch | optimize
+  # single
+  single_input_json: data/infer_single.json
+  # batch
+  batch_input_path: data/infer_batch.csv
+  output_path: outputs/predictions.csv
+  # optimize
+  optimize:
+    n_trials: 50
+    direction: maximize
+    search_space: {}  # {feature_name: {low: 0, high: 1}}
+    fixed: {}         # fixed feature values
+

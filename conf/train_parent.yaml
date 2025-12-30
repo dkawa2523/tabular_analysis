@@ -1,0 +1,13 @@
+defaults:
+  - common
+  - _self_
+
+run:
+  clearml:
+    project_name: MFG/${usecase_id}/20_train_parent
+    task_name: train_parent
+    tags: [train]
+
+train_parent:
+  top_k: 3
+  candidate_models: [baseline]

@@ -1,0 +1,14 @@
+defaults:
+  - common
+  - _self_
+
+run:
+  clearml:
+    project_name: MFG/${usecase_id}/30_infer
+    task_name: infer
+    tags: [infer]
+
+infer:
+  mode: single
+  model_id: ""
+  output_path: preds.csv

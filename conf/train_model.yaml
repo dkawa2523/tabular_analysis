@@ -1,0 +1,13 @@
+defaults:
+  - common
+  - _self_
+
+run:
+  clearml:
+    project_name: MFG/${usecase_id}/21_train_model
+    task_name: train_model
+    tags: [train]
+
+train_model:
+  model_id: baseline
+  model_params: {}

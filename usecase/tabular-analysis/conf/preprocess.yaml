@@ -1,0 +1,26 @@
+# preprocess task config (single recipe)
+defaults:
+  - run: local
+  - _self_
+
+usecase_id: tabular-analysis
+
+data:
+  dataset_id: null
+  local_path: data/example.csv
+  format: csv
+  target_col: target
+  id_col: null
+  group_col: null
+  feature_cols: null
+
+preprocess:
+  name: std_default
+  numeric_imputer: mean
+  categorical_imputer: most_frequent
+  categorical_encoder: onehot
+  numeric_scaler: standard
+  target_transform: none
+
+output:
+  out_dir: outputs/preprocess

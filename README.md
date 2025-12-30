@@ -4,9 +4,23 @@
 `ml-platform` を依存として使い、用途固有の差分（設定/registry/pipeline）だけ実装します。
 
 ## ユーザー導線（非DS）
-1. ClearML上で `dataset_id` を入力して Pipeline を実行
-2. `train_parent`（Training Summary）で **どのモデルが良いか**判断
-3. 推奨モデル `model_id` を使って推論（single/batch/optimize）
+|目的|ClearMLプロジェクト|入力/見る場所|
+|---|---|---|
+|Pipeline実行|`MFG/<usecase_id>/99_pipeline`|`dataset_id`, `pipeline.include_infer`, `pipeline.infer_model_id`, `pipeline.infer_mode` / Step一覧|
+|Training Summary|`MFG/<usecase_id>/20_train_parent`|Plots `01_leaderboard_table`, `02_topk_bar` / User Properties `recommended_model_id`|
+|詳細診断|`MFG/<usecase_id>/21_train_model`|モデル別の詳細Plots/Artifacts|
+|推論|`MFG/<usecase_id>/30_infer`|`infer.model_id`, `infer.mode` / Artifact `preds.csv`|
+
+```mermaid
+flowchart LR
+  A[dataset_id] --> B[Pipeline<br/>MFG/<usecase_id>/99_pipeline]
+  B --> C[dataset_register<br/>00_dataset]
+  C --> D[preprocess<br/>10_preprocess]
+  D --> E[train_parent<br/>20_train_parent]
+  E --> F[train_model (child)<br/>21_train_model]
+  E --> R[recommended_model_id]
+  R --> G[infer (optional)<br/>30_infer]
+```
 
 ## このSolutionが持つもの
 - `conf/` : Hydra設定（用途固有のデフォルト/override）
@@ -15,10 +29,10 @@
 - `work/` : Codexタスク（用途固有に必要な実装）
 
 ## Local実行とClearML実行
-- Local: `run.clearml.enabled=false` で核処理を実行（デバッグ/開発）
+- Local: `run.clearml.enabled=false`（PipelineはClearML専用のため step CLIを実行）
 - ClearML Logging: `run.clearml.enabled=true`（Task/Artifacts/Plots）
-- ClearML Agent: `enqueue=true` で `task.execute_remotely(queue=...)`
-- ClearML UIから: `task.set_script(...)` により repository/entry_point を設定できる
+- ClearML Agent: `run.clearml.enqueue=true` + `run.clearml.queue_name`
+- ClearML UIから: `run.clearml.script.*` / `run.clearml.ui_clone.*` で `task.set_script(...)`
 
 ---
 

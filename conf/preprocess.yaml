@@ -1,0 +1,13 @@
+defaults:
+  - common
+  - _self_
+
+run:
+  clearml:
+    project_name: MFG/${usecase_id}/10_preprocess
+    task_name: preprocess
+    tags: [preprocess]
+
+preprocess:
+  recipe: default
+  output_format: parquet

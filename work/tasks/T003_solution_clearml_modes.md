@@ -20,7 +20,7 @@ python -m usecase.cli.pipeline --help || true
 ```
 
 ## Completion Evidence (MUST include NONCE)
-- NONCE:
-- Files changed:
-- Verification result:
-- Notes:
+- NONCE: 981a96595fe04b6f8df9313d83d1551a
+- Files changed: `conf/common.yaml`, `src/usecase/clearml_modes.py`, `src/usecase/cli/pipeline.py`, `work/tasks/T003_solution_clearml_modes.md`
+- Verification result: `python -m compileall -q .` (pass), `python -m usecase.cli.pipeline --help || true` (pass)
+- Notes: Added ClearML task bootstrap with set_script + enqueue wiring and UI-clone config aliasing.
